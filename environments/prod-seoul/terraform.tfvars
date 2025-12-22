@@ -13,7 +13,7 @@ access_cidrs = ["0.0.0.0/0"]
 
 # Database (Aurora MySQL)
 db_name            = "news_db"
-db_engine_version  = "8.0.mysql_aurora.3.05.2" # Aurora MySQL 3.05 (MySQL 8.0 호환)
+db_engine_version  = "8.0.mysql_aurora.3.08.2" # Aurora MySQL 3.05 (MySQL 8.0 호환)
 db_instance_class  = "db.t3.medium"
 db_master_username = "admin"
 # 1 = Writer만(빠르게 테스트), 2 = Writer+Reader(운영/HA)

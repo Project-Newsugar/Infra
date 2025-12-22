@@ -18,5 +18,9 @@ resource "helm_release" "argocd" {
     value = "true"
   }
 
-  depends_on = [module.eks]
+  # 의존성 추가: LBC가 완전히 뜬 뒤에 ArgoCD 배포
+  depends_on = [
+    module.eks,
+    helm_release.aws_load_balancer_controller 
+  ]
 }
