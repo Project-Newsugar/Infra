@@ -4,9 +4,6 @@
 module "lb_role" {
   source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
 
-  # 버전을 5.x로 고정하여 경로 오류 방지
-  version = "~> 5.0"
-
   role_name                              = "${var.project_name}-eks-lb-controller"
   attach_load_balancer_controller_policy = true
 
@@ -26,7 +23,6 @@ resource "helm_release" "aws_load_balancer_controller" {
   namespace  = "kube-system"
   version    = "1.7.1" 
 
-  timeout    = 600
   set {
     name  = "clusterName"
     value = module.eks.cluster_name
