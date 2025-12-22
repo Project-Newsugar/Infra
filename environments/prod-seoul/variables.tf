@@ -93,6 +93,6 @@ variable "db_enable_global_cluster" {
 variable "db_global_identifier" {
   description = "Identifier for Global Database"
   type        = string
-  default     = "newsugar-global-db"
+  default     = null
 }
 

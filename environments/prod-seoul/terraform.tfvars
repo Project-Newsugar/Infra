@@ -21,8 +21,8 @@ db_instance_count  = 1
 db_skip_final_snapshot = true
 
 # 서울 리전 배포 시 Global Cluster도 같이 만듦
-db_enable_global_cluster = true
-db_global_identifier     = "newsugar-global-db"
+db_enable_global_cluster = false
+db_global_identifier     = null
 
 # Redis (ElastiCache)
 redis_node_type       = "cache.t3.micro"

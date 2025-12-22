@@ -25,7 +25,7 @@ resource "helm_release" "aws_load_balancer_controller" {
   chart      = "aws-load-balancer-controller"
   namespace  = "kube-system"
   version    = "1.7.1" 
-# [피드백 반영] 타임아웃 10분으로 증가 (Webhook 준비 대기 시간 확보)
+
   timeout    = 600
   set {
     name  = "clusterName"

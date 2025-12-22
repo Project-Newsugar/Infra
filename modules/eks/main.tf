@@ -24,7 +24,7 @@ resource "aws_eks_cluster" "main" {
 
   vpc_config {
     subnet_ids         = var.subnet_ids
-    security_group_ids = var.security_group_ids
+    security_group_ids = []
     endpoint_private_access = true
     endpoint_public_access  = true # 실습 편의상 Public 허용
     public_access_cidrs     = var.access_cidrs 
@@ -64,7 +64,10 @@ resource "aws_iam_role_policy_attachment" "node_registry" {
 resource "aws_launch_template" "node" {
   name = "${var.cluster_name}-node-lt"
 
-  vpc_security_group_ids = var.security_group_ids # 여기에 App SG가 들어감
+  vpc_security_group_ids = concat(
+    var.security_group_ids, 
+    [aws_eks_cluster.main.vpc_config[0].cluster_security_group_id]
+  )
 
   tag_specifications {
     resource_type = "instance"
@@ -86,6 +89,8 @@ resource "aws_eks_node_group" "main" {
     id      = aws_launch_template.node.id
     version = "$Latest"
   }
+
+  force_update_version = true
 
   scaling_config {
     desired_size = 2
