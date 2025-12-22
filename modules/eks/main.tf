@@ -75,6 +75,12 @@ resource "aws_launch_template" "node" {
       Name = "${var.cluster_name}-node"
     }
   }
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+    instance_metadata_tags      = "enabled"
+  }
 }
 
 # 5. Managed Node Group 생성 (t3.medium)
