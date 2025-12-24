@@ -93,6 +93,19 @@ variable "db_enable_global_cluster" {
 variable "db_global_identifier" {
   description = "Identifier for Global Database"
   type        = string
-  default     = "newsugar-global-db"
+  default     = null
+  nullable    = true
 }
 
+# Grafana 비밀번호 변수 선언 (피드백 1번)
+variable "grafana_admin_password" {
+  description = "Grafana admin password"
+  type        = string
+  sensitive   = true
+}
+
+# Observability에서 쓸 스토리지 클래스
+variable "storage_class_name" {
+  type    = string
+  default = "gp3"
+}
