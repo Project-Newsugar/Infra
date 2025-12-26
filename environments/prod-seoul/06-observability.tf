@@ -17,6 +17,14 @@ module "observability" {
   storage_class_name     = "gp3"
   enable_persistence     = true
 
+  # 대시보드용 변수 (일단 null로 두어도 대시보드는 생성됨)
+  alb_arn_suffix         = null
+
+  db_cluster_identifier  = "newsugar-prod-aurora-cluster"
+  # 모듈 간 연결: App Services에서 만든 SNS Topic 연결
+  sns_topic_arn          = module.app_services.sns_topic_arn
+
+
   # EKS(compute)가 다 만들어지고 '타이머'가 끝난 뒤에 EBS CSI Driver까지 깔린 후 실행
   depends_on = [time_sleep.wait_for_ebs_csi_driver]
 }
