@@ -109,3 +109,8 @@ variable "storage_class_name" {
   type    = string
   default = "gp3"
 }
+
+variable "cluster_name" {
+  description = "EKS Cluster Name"
+  type        = string
+}
