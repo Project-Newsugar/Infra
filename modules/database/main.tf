@@ -73,7 +73,11 @@ resource "aws_rds_cluster" "main" {
   # 스냅샷 찍을 경우를 대비해 식별자 지정
   final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.project_name}-${var.env}-final-${formatdate("YYYYMMDDhhmmss", timestamp())}"
   storage_encrypted       = true
-  
+
+# 스냅샷 이름이 시간 때문에 바뀌어도 무시하도록 설정
+  lifecycle {
+    ignore_changes = [final_snapshot_identifier]
+  }  
   tags = { Name = "${var.project_name}-${var.env}-aurora" }
 }
 
