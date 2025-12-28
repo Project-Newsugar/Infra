@@ -32,6 +32,3 @@ redis_num_cache_nodes = 2                      # HA 구성 (Primary + Replica)
 # [Observability] Grafana 관리자 비밀번호 (보안 주의)
 grafana_admin_password = "admin_password_secret_123!"
 
-# [EKS] Cluster Name (이미 있다면 생략)
-cluster_name = "newsugar-prod-eks"
-
