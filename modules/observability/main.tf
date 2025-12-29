@@ -24,11 +24,26 @@ resource "helm_release" "kube_prometheus_stack" {
   }
 
   # 불필요한 리소스 비활성화
-  set { name = "coreDns.enabled",               value = "false" }
-  set { name = "kubeDns.enabled",               value = "false" }
-  set { name = "kubeControllerManager.enabled", value = "false" }
-  set { name = "kubeEtcd.enabled",              value = "false" }
-  set { name = "kubeScheduler.enabled",         value = "false" }
+  set {
+    name  = "coreDns.enabled"
+    value = "false"
+  }
+  set {
+    name  = "kubeDns.enabled"
+    value = "false"
+  }
+  set {
+    name  = "kubeControllerManager.enabled"
+    value = "false"
+  }
+  set {
+    name  = "kubeEtcd.enabled"
+    value = "false"
+  }
+  set {
+    name  = "kubeScheduler.enabled"
+    value = "false"
+  }
 
   # Prometheus PVC 설정
   dynamic "set" {
@@ -65,7 +80,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       # 1. ALB 섹션
       {
         type   = "metric"
-        x      = 0; y = 0; width = 12; height = 6
+        x      = 0
+        y = 0
+        width = 12
+        height = 6
         properties = {
           metrics = [
             ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", var.alb_arn_suffix != null ? var.alb_arn_suffix : "loading...", { "stat" : "Sum", "period" : 60 }],
@@ -80,7 +98,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       # 2. RDS 섹션
       {
         type   = "metric"
-        x      = 0; y = 6; width = 12; height = 6
+        x      = 0
+        y = 6
+        width = 12
+        height = 6
         properties = {
           metrics = [
             ["AWS/RDS", "CPUUtilization", "DBClusterIdentifier", var.db_cluster_identifier != null ? var.db_cluster_identifier : "loading...", { "stat" : "Average", "period" : 60 }],
@@ -93,7 +114,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       },
       {
         type   = "metric"
-        x      = 12; y = 6; width = 12; height = 6
+        x      = 12
+        y = 6
+        width = 12
+        height = 6
         properties = {
           metrics = [
              # 변수 사용
@@ -109,7 +133,10 @@ resource "aws_cloudwatch_dashboard" "main" {
       # 3. EKS Node 섹션
       {
         type   = "metric"
-        x      = 0; y = 12; width = 24; height = 6
+        x      = 0
+        y = 12
+        width = 24
+        height = 6
         properties = {
           metrics = [
             ["ContainerInsights", "node_cpu_utilization", "ClusterName", var.cluster_name, { "stat" : "Average", "period" : 60 }],
