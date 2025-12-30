@@ -46,7 +46,7 @@ resource "aws_secretsmanager_secret_version" "db_auth" {
 
 # Global Cluster 생성 (서울 리전용)
 resource "aws_rds_global_cluster" "main" {
-  count                     = var.create_global_cluster ? 1 : 0
+  count                     = var.is_primary && var.create_global_cluster ? 1 : 0
   global_cluster_identifier = var.global_cluster_identifier
   engine                    = "aurora-mysql"
   engine_version            = var.engine_version
@@ -60,11 +60,11 @@ resource "aws_rds_cluster" "main" {
   engine_version          = var.engine_version
 
   # Global Cluster에 소속되도록 설정
-  global_cluster_identifier = var.create_global_cluster ? aws_rds_global_cluster.main[0].id : var.global_cluster_identifier
-  database_name           = var.db_name
-  master_username         = var.master_username
-  master_password         = random_password.master.result
-  
+  global_cluster_identifier = var.is_primary && var.create_global_cluster ? aws_rds_global_cluster.main[0].id : var.global_cluster_identifier
+  database_name   = var.is_primary ? var.db_name : null
+  master_username = var.is_primary ? var.master_username : null
+  master_password = var.is_primary ? random_password.master.result : null
+
   db_subnet_group_name    = aws_db_subnet_group.main.name
   vpc_security_group_ids  = var.security_group_ids
   

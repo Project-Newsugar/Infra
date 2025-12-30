@@ -62,6 +62,7 @@
      local TARGET=$1
      local REGION_CODE=$2
      local CLUSTER_NAME=$3
+     local VAR_FILE=$4
 
      echo "============================================"
      echo " [$TARGET] 삭제 프로세스 시작..."
@@ -93,7 +94,12 @@
 
      # 실패하더라도 스크립트가 멈추지 않도록 set +e 잠시 적용
      set +e
-     terraform -chdir="$TF_PATH" destroy -auto-approve
+     # 변수 파일이 있으면 적용하여 destroy
+     if [ -n "$VAR_FILE" ] && [ -f "$TF_PATH/$VAR_FILE" ]; then
+       terraform -chdir="$TF_PATH" destroy -auto-approve -var-file="$VAR_FILE"
+     else
+       terraform -chdir="$TF_PATH" destroy -auto-approve
+     fi
      EXIT_CODE=$?
      set -e
 
@@ -113,7 +119,12 @@
 
        # 다시 Destroy 시도
        echo " [4/4] Terraform Destroy 재실행..."
-       terraform -chdir="$TF_PATH" destroy -auto-approve
+       # 재시도 시에도 변수 파일 적용
+       if [ -n "$VAR_FILE" ] && [ -f "$TF_PATH/$VAR_FILE" ]; then
+         terraform -chdir="$TF_PATH" destroy -auto-approve -var-file="$VAR_FILE"
+       else
+         terraform -chdir="$TF_PATH" destroy -auto-approve
+       fi
      fi
 
      echo " [$TARGET] 삭제 완료!"
@@ -126,13 +137,10 @@
      seoul)
        destroy_region "prod-seoul" "ap-northeast-2" "newsugar-prod-eks"
        ;;
-     tokyo)
-       destroy_region "dr-tokyo" "ap-northeast-1" "newsugar-dr-eks"
-       ;;
      all)
        echo " 전체 리전(Seoul + Tokyo) 삭제를 시작합니다."
        destroy_region "dr-tokyo" "ap-northeast-1" "newsugar-dr-eks"
-       destroy_region "prod-seoul" "ap-northeast-2" "newsugar-prod-eks"
+       destroy_region "prod-seoul" "ap-northeast-2" "newsugar-prod-eks" "global-db.tfvars"
        ;;
      *)
        usage
