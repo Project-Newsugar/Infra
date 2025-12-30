@@ -8,8 +8,15 @@
 ### 사용 방법
 ```bash
 chmod +x setup.sh
-./setup.sh seoul    # 서울(Primary)만 배포
-./setup.sh all      # 서울 + 도쿄(DR) 순차 배포
+./setup.sh seoul    # 서울(Primary)만 배포 (t3.medium)
+./setup.sh all      # 서울 + 도쿄(DR) 순차 배포 (r6g.large, Global DB)
+```
+
+### 삭제 방법
+```bash
+chmod +x destroy.sh
+./destroy.sh seoul  # 서울 리전만 삭제
+./destroy.sh all    # 도쿄 -> 서울 순서로 삭제
 ```
 
 ### 참고
