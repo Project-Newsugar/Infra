@@ -36,10 +36,9 @@ resource "aws_ecr_lifecycle_policy" "main" {
 data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
 }
-
 # 3. GitHub Actions용 IAM Role
 resource "aws_iam_role" "github_actions" {
-  name = "${var.project_name}-${var.env}-github-actions-role"
+  name = "${var.project_name}-${var.env}-${var.region}-github-actions-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

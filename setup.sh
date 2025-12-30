@@ -24,6 +24,7 @@ deploy_region() {
   local TARGET=$1        # 예: prod-seoul
   local REGION_CODE=$2   # 예: ap-northeast-2
   local CLUSTER_NAME=$3  # 예: newsugar-prod-eks
+  local VAR_FILE=$4      # 예: environments/prod-seoul/global-db.tfvars
 
   echo "============================================"
   echo " [$TARGET] 배포 시작..."
@@ -42,7 +43,11 @@ deploy_region() {
   # 1. Terraform init & apply
   echo "Terraform 실행 중... (경로: $TF_PATH)"
   terraform -chdir="$TF_PATH" init
-  terraform -chdir="$TF_PATH" apply -auto-approve
+  if [ -n "$VAR_FILE" ] && [ -f "$TF_PATH/$VAR_FILE" ]; then
+    terraform -chdir="$TF_PATH" apply -auto-approve -var-file="$VAR_FILE"
+  else
+    terraform -chdir="$TF_PATH" apply -auto-approve
+  fi
 
   # 2. Kubeconfig 업데이트
   echo "Kubeconfig 업데이트 ($CLUSTER_NAME)"
@@ -72,7 +77,7 @@ case "$MODE" in
     ;;
   all)
     echo "전체 리전(Seoul + Tokyo) 순차 배포를 시작합니다."
-    deploy_region "prod-seoul" "ap-northeast-2" "newsugar-prod-eks"
+    deploy_region "prod-seoul" "ap-northeast-2" "newsugar-prod-eks" "global-db.tfvars"
     deploy_region "dr-tokyo" "ap-northeast-1" "newsugar-dr-eks"
     ;;
   *)

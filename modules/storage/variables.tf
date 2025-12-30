@@ -1,5 +1,6 @@
 variable "project_name" {}
 variable "env" {}
+variable "region" {}
 
 # 프론트/백엔드 레포지토리 이름을 리스트로 받음
 variable "ecr_repo_names" {

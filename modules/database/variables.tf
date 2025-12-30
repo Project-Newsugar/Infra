@@ -35,3 +35,12 @@ variable "global_cluster_identifier" {
   type        = string
   default     = null
 }
+
+# 현재 리전이 Primary(Writer)인지 여부
+variable "is_primary" {
+  description = "Primary region flag for Aurora Global DB"
+  type        = bool
+  default     = false
+}
+
+
