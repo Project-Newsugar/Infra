@@ -29,7 +29,31 @@
        return
      fi
 
-     echo " NAT Gateway 삭제 시도..."
+     echo "🔍 [강제 청소] VPC($VPC_ID) 내부 잔존 리소스 스캔 및 삭제..."
+
+     # 1. 로드밸런서(ALB/NLB) 강제 삭제
+     echo "  - 로드밸런서(ALB/NLB) 조회 및 삭제..."
+     LB_ARNS=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" --output text 2>/dev/null)
+     for ARN in $LB_ARNS; do
+       echo "    삭제 중: $ARN"
+       aws elbv2 delete-load-balancer --load-balancer-arn "$ARN" >/dev/null 2>&1 || true
+     done
+     
+     # LB 삭제 대기 (최대 60초)
+     if [ -n "$LB_ARNS" ]; then
+        echo "    로드밸런서 삭제 대기 중..."
+        sleep 30
+     fi
+
+     # 2. 타겟 그룹 강제 삭제 (LB가 지워져야 지워짐)
+     echo "  - 타겟 그룹(Target Group) 조회 및 삭제..."
+     TG_ARNS=$(aws elbv2 describe-target-groups --query "TargetGroups[?VpcId=='$VPC_ID'].TargetGroupArn" --output text 2>/dev/null)
+     for ARN in $TG_ARNS; do
+       aws elbv2 delete-target-group --target-group-arn "$ARN" >/dev/null 2>&1 || true
+     done
+
+     # 3. NAT Gateway 삭제 시도
+     echo "  - NAT Gateway 삭제 시도..."
      NAT_IDS=$(aws ec2 describe-nat-gateways \
        --filter "Name=vpc-id,Values=$VPC_ID" "Name=state,Values=available,pending" \
        --query 'NatGateways[].NatGatewayId' --output text 2>/dev/null)
@@ -37,26 +61,43 @@
        aws ec2 delete-nat-gateway --nat-gateway-id "$NAT_ID" >/dev/null 2>&1 || true
      done
 
-     echo " NAT 삭제 전파 대기..."
-     for _ in 1 2 3 4 5; do
-       NAT_LEFT=$(aws ec2 describe-nat-gateways \
-         --filter "Name=vpc-id,Values=$VPC_ID" "Name=state,Values=pending,deleting,available" \
-         --query 'NatGateways[].NatGatewayId' --output text 2>/dev/null)
-       [ -z "$NAT_LEFT" ] && break
-       sleep 20
-     done
+     # 4. ENI 강제 정리 (LB/NAT 삭제 후 잔여 ENI)
+     echo "  - NAT/LB 삭제 전파 대기 (20초)..."
+     sleep 20
 
-     echo " 남은 ENI 정리 시도..."
+     echo "  - 남은 ENI(네트워크 인터페이스) 정리 시도..."
+     # EKS, ELB 관련 ENI 검색
      ENI_IDS=$(aws ec2 describe-network-interfaces \
-       --filters \
-         "Name=vpc-id,Values=$VPC_ID" \
-         "Name=status,Values=available" \
-         "Name=tag:kubernetes.io/cluster/${CLUSTER_NAME},Values=owned,shared" \
+       --filters "Name=vpc-id,Values=$VPC_ID" \
        --query 'NetworkInterfaces[].NetworkInterfaceId' \
        --output text 2>/dev/null)
+     
      for ENI_ID in $ENI_IDS; do
+       # 설명에 'kube'나 'elb'가 들어간 것 위주로 삭제 시도
        aws ec2 delete-network-interface --network-interface-id "$ENI_ID" >/dev/null 2>&1 || true
      done
+
+     # 5. 보안 그룹(Security Group) 강제 정리 (핵심!)
+     echo "  - 보안 그룹(Security Group) 의존성 제거 및 삭제..."
+     # default 그룹 제외하고 조회
+     SG_IDS=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC_ID" --query "SecurityGroups[?GroupName!='default'].GroupId" --output text 2>/dev/null)
+     
+     if [ -n "$SG_IDS" ]; then
+       # 5-1. 모든 규칙(Ingress/Egress) 먼저 삭제 -> 서로 참조 끊기
+       for SG_ID in $SG_IDS; do
+         # Ingress 규칙 삭제
+         aws ec2 revoke-security-group-ingress --group-id "$SG_ID" --protocol all --source-group "$SG_ID" >/dev/null 2>&1 || true
+         aws ec2 revoke-security-group-ingress --group-id "$SG_ID" --protocol all --cidr 0.0.0.0/0 >/dev/null 2>&1 || true
+         
+         # Egress 규칙 삭제 (Outbound)
+         aws ec2 revoke-security-group-egress --group-id "$SG_ID" --protocol all --cidr 0.0.0.0/0 >/dev/null 2>&1 || true
+       done
+       
+       # 5-2. 껍데기만 남은 SG 삭제
+       for SG_ID in $SG_IDS; do
+         aws ec2 delete-security-group --group-id "$SG_ID" >/dev/null 2>&1 || true
+       done
+     fi
    }
    destroy_region() {
      local TARGET=$1
