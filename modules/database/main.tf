@@ -53,6 +53,11 @@ resource "aws_rds_global_cluster" "main" {
   storage_encrypted         = true
 }
 
+# Secondary 리전에서 기본 RDS KMS 키 사용
+data "aws_kms_key" "rds" {
+  key_id = "alias/aws/rds"
+}
+
 # 4. Aurora Cluster
 resource "aws_rds_cluster" "main" {
   cluster_identifier      = "${var.project_name}-${var.env}-aurora-cluster"
@@ -67,7 +72,10 @@ resource "aws_rds_cluster" "main" {
 
   db_subnet_group_name    = aws_db_subnet_group.main.name
   vpc_security_group_ids  = var.security_group_ids
-  
+ 
+  # Secondary(복제본)일 때만 KMS 키 명시 필요
+  kms_key_id = var.is_primary ? null : data.aws_kms_key.rds.arn
+
   # 스냅샷 변수로 제어. true 안찍고 삭제, false 찍고 삭제
   skip_final_snapshot     = var.skip_final_snapshot
   # 스냅샷 찍을 경우를 대비해 식별자 지정
