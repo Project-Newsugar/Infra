@@ -6,6 +6,8 @@ module "database" {
   env               = var.env
   vpc_id            = module.network.vpc_id
   
+  is_primary = true
+
   # Private Data Subnet에 배치 (보안 필수)
   subnet_ids        = module.network.data_subnet_ids
   
