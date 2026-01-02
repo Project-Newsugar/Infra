@@ -18,8 +18,83 @@ BASE_DIR="environments"
 DESTROY_TIMEOUT=${DESTROY_TIMEOUT:-7m}
 
 # === 삭제 함수 ===
+tfvar_value() {
+  local tf_path=$1
+  local key=$2
+  local tfvars_file="$tf_path/terraform.tfvars"
+
+  if [ ! -f "$tfvars_file" ]; then
+    return
+  fi
+
+  awk -F'=' -v k="$key" '
+    $1 ~ "^[[:space:]]*" k "[[:space:]]*$" {
+      v=$2
+      sub(/#.*/, "", v)
+      gsub(/^[ \t]+|[ \t]+$/, "", v)
+      gsub(/"/, "", v)
+      print v
+      exit
+    }
+  ' "$tfvars_file"
+}
+
+list_vpcs() {
+  local region=$1
+  aws ec2 describe-vpcs --region "$region" \
+    --query "Vpcs[].{VpcId:VpcId,Cidr:CidrBlock,Name:Tags[?Key=='Name']|[0].Value}" \
+    --output table 2>/dev/null || true
+}
+
 get_vpc_id() {
-  terraform -chdir="$TF_PATH" state show module.network.aws_vpc.main 2>/dev/null | awk '$1=="id"{print $3}'
+  local tf_path=$1
+  local region=$2
+  local cluster_name=$3
+  local vpc_id
+
+  vpc_id=$(terraform -chdir="$tf_path" state show module.network.aws_vpc.main 2>/dev/null | awk '$1=="id"{print $3}')
+  if [ -n "$vpc_id" ]; then
+    echo "$vpc_id"
+    return
+  fi
+
+  if [ -n "$cluster_name" ]; then
+    vpc_id=$(aws eks describe-cluster --region "$region" --name "$cluster_name" \
+      --query "cluster.resourcesVpcConfig.vpcId" --output text 2>/dev/null)
+    if [ -n "$vpc_id" ] && [ "$vpc_id" != "None" ]; then
+      echo "$vpc_id"
+      return
+    fi
+  fi
+
+  local project_name
+  local env_name
+  local vpc_cidr
+  project_name=$(tfvar_value "$tf_path" "project_name")
+  env_name=$(tfvar_value "$tf_path" "env")
+  if [ -n "$project_name" ] && [ -n "$env_name" ]; then
+    vpc_id=$(aws ec2 describe-vpcs --region "$region" \
+      --filters "Name=tag:Name,Values=${project_name}-${env_name}-vpc" \
+      --query "Vpcs[].VpcId" --output text 2>/dev/null | awk 'NF{print $1; exit}')
+    if [ -n "$vpc_id" ]; then
+      echo "$vpc_id"
+      return
+    fi
+  fi
+
+  vpc_cidr=$(tfvar_value "$tf_path" "vpc_cidr")
+  if [ -n "$vpc_cidr" ]; then
+    vpc_id=$(aws ec2 describe-vpcs --region "$region" \
+      --filters "Name=cidr-block,Values=$vpc_cidr" \
+      --query "Vpcs[].VpcId" --output text 2>/dev/null | awk 'NF{print $1; exit}')
+    if [ -n "$vpc_id" ]; then
+      echo "$vpc_id"
+      return
+    fi
+  fi
+
+  echo "⚠️ VPC ID 조회 실패. 현재 리전 VPC 목록:" >&2
+  list_vpcs "$region" >&2
 }
 
 list_lb_arns() {
@@ -217,7 +292,7 @@ destroy_region() {
 
   # 2. [선제 청소] VPC 의존 리소스(LB/ENI) 미리 제거
   echo "[2/4] VPC 의존 리소스 선제 정리..."
-  VPC_ID=$(get_vpc_id)
+  VPC_ID=$(get_vpc_id "$TF_PATH" "$REGION_CODE" "$CLUSTER_NAME")
   if [ -n "$VPC_ID" ]; then
     cleanup_vpc_deps "$VPC_ID" "$CLUSTER_NAME" "$REGION_CODE"
   else
