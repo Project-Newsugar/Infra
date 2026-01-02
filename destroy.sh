@@ -15,7 +15,8 @@ fi
 
 MODE=$1
 BASE_DIR="environments"
-DESTROY_TIMEOUT=${DESTROY_TIMEOUT:-7m}
+DESTROY_TIMEOUT=${DESTROY_TIMEOUT:-25m}
+DESTROY_TIMEOUT_LONG=${DESTROY_TIMEOUT_LONG:-30m}
 
 # === 삭제 함수 ===
 tfvar_value() {
@@ -164,7 +165,8 @@ cleanup_vpc_deps() {
 
     # 1. 로드밸런서(ALB/NLB) 강제 삭제
     echo "    로드밸런서(ALB/NLB) 조회 및 삭제..."
-    list_lb_arns | while read ARN; do
+    list_lb_arns | while read ARN;
+ do
       if [ -z "$ARN" ] || [ "$ARN" == "None" ]; then continue; fi
       echo "      삭제 보호 해제 및 삭제 중: $ARN"
       aws elbv2 modify-load-balancer-attributes --region "$REGION_CODE" --load-balancer-arn "$ARN" --attributes Key=deletion_protection.enabled,Value=false >/dev/null 2>&1 || true
@@ -177,7 +179,8 @@ cleanup_vpc_deps() {
     # 2. 타겟 그룹 강제 삭제
     echo "    타겟 그룹(Target Group) 조회 및 삭제..."
     TG_ARNS=$(aws elbv2 describe-target-groups --region "$REGION_CODE" --query "TargetGroups[?VpcId=='$CLEAN_VPC_ID'].TargetGroupArn" --output text 2>/dev/null)
-    for ARN in $TG_ARNS; do
+    for ARN in $TG_ARNS;
+ do
       aws elbv2 delete-target-group --region "$REGION_CODE" --target-group-arn "$ARN" >/dev/null 2>&1 || true
     done
 
@@ -194,20 +197,42 @@ cleanup_vpc_deps() {
     NAT_IDS=$(aws ec2 describe-nat-gateways --region "$REGION_CODE" \
       --filter "Name=vpc-id,Values=$CLEAN_VPC_ID" "Name=state,Values=available,pending" \
       --query 'NatGateways[].NatGatewayId' --output text 2>/dev/null)
-    for NAT_ID in $NAT_IDS; do
+    for NAT_ID in $NAT_IDS;
+ do
       aws ec2 delete-nat-gateway --region "$REGION_CODE" --nat-gateway-id "$NAT_ID" >/dev/null 2>&1 || true
     done
 
     echo "    NAT 삭제 전파 대기..."
     wait_for_nat_deleted 180
 
-    # 5. ENI 정리 (available 먼저, in-use는 detach 후 삭제)
-    echo "    ENI(네트워크 인터페이스) 정리 시도..."
+    # 4.5. Lambda 및 기타 ENI 강제 정리 (중요: 서브넷 삭제 방해 요소)
+    echo "    Lambda/Requester-Managed ENI 강제 정리..."
+    # Description에 'AWS Lambda'가 포함되거나, InterfaceType이 'lambda'인 ENI 조회
+    LAMBDA_ENIS=$(aws ec2 describe-network-interfaces --region "$REGION_CODE" \
+      --filters "Name=vpc-id,Values=$CLEAN_VPC_ID" \
+      --query "NetworkInterfaces[?contains(Description, 'AWS Lambda') || InterfaceType=='lambda'].NetworkInterfaceId" \
+      --output text 2>/dev/null)
+    
+    for ENI_ID in $LAMBDA_ENIS;
+ do
+       if [ -z "$ENI_ID" ]; then continue; fi
+       echo "      Lambda ENI 삭제: $ENI_ID"
+       # Lambda ENI는 바로 지워지지 않는 경우가 많아 detach 시도 후 삭제
+       ATTACH_ID=$(aws ec2 describe-network-interfaces --region "$REGION_CODE" --network-interface-ids "$ENI_ID" --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text 2>/dev/null)
+       if [ "$ATTACH_ID" != "None" ] && [ -n "$ATTACH_ID" ]; then
+         aws ec2 detach-network-interface --region "$REGION_CODE" --attachment-id "$ATTACH_ID" --force >/dev/null 2>&1 || true
+       fi
+       aws ec2 delete-network-interface --region "$REGION_CODE" --network-interface-id "$ENI_ID" >/dev/null 2>&1 || true
+    done
+
+    # 5. 일반 ENI 정리 (available 먼저, in-use는 detach 후 삭제)
+    echo "    일반 ENI(네트워크 인터페이스) 정리 시도..."
     ENI_IDS_AVAILABLE=$(aws ec2 describe-network-interfaces --region "$REGION_CODE" \
       --filters "Name=vpc-id,Values=$CLEAN_VPC_ID" "Name=status,Values=available" \
       --query 'NetworkInterfaces[].NetworkInterfaceId' \
       --output text 2>/dev/null)
-    for ENI_ID in $ENI_IDS_AVAILABLE; do
+    for ENI_ID in $ENI_IDS_AVAILABLE;
+ do
       aws ec2 delete-network-interface --region "$REGION_CODE" --network-interface-id "$ENI_ID" >/dev/null 2>&1 || true
     done
 
@@ -215,7 +240,8 @@ cleanup_vpc_deps() {
       --filters "Name=vpc-id,Values=$CLEAN_VPC_ID" "Name=status,Values=in-use" \
       --query 'NetworkInterfaces[?Attachment.AttachmentId!=null].[NetworkInterfaceId,Attachment.AttachmentId]' \
       --output text 2>/dev/null)
-    while read -r ENI_ID ATTACH_ID; do
+    while read -r ENI_ID ATTACH_ID;
+ do
       if [ -z "$ENI_ID" ] || [ -z "$ATTACH_ID" ]; then continue; fi
       aws ec2 detach-network-interface --region "$REGION_CODE" --attachment-id "$ATTACH_ID" --force >/dev/null 2>&1 || true
       aws ec2 delete-network-interface --region "$REGION_CODE" --network-interface-id "$ENI_ID" >/dev/null 2>&1 || true
@@ -225,7 +251,8 @@ cleanup_vpc_deps() {
     echo "    보안 그룹(Security Group) 의존성 제거 및 삭제..."
     SG_IDS=$(aws ec2 describe-security-groups --region "$REGION_CODE" --filters "Name=vpc-id,Values=$CLEAN_VPC_ID" --query "SecurityGroups[?GroupName!='default'].GroupId" --output text 2>/dev/null)
     if [ -n "$SG_IDS" ]; then
-      for SG_ID in $SG_IDS; do
+      for SG_ID in $SG_IDS;
+ do
         INGRESS=$(aws ec2 describe-security-groups --region "$REGION_CODE" --group-ids "$SG_ID" --query 'SecurityGroups[0].IpPermissions' --output json 2>/dev/null)
         if [ -n "$INGRESS" ] && [ "$INGRESS" != "[]" ]; then
           aws ec2 revoke-security-group-ingress --region "$REGION_CODE" --group-id "$SG_ID" --ip-permissions "$INGRESS" >/dev/null 2>&1 || true
@@ -237,7 +264,14 @@ cleanup_vpc_deps() {
         fi
       done
 
-      for SG_ID in $SG_IDS; do
+      # 의존성 문제로 삭제 안 될 수 있으니 2번 시도
+      for SG_ID in $SG_IDS;
+ do
+        aws ec2 delete-security-group --region "$REGION_CODE" --group-id "$SG_ID" >/dev/null 2>&1 || true
+      done
+      sleep 2
+      for SG_ID in $SG_IDS;
+ do
         aws ec2 delete-security-group --region "$REGION_CODE" --group-id "$SG_ID" >/dev/null 2>&1 || true
       done
     fi
@@ -272,20 +306,43 @@ destroy_region() {
   local TF_PATH="$BASE_DIR/$TARGET"
 
   # 1. [청소] K8s LoadBalancer & Ingress 삭제 (ALB/NLB 제거)
-  #    이걸 먼저 안 지우면 VPC가 절대 안 지워짐!
   echo "[1/4] K8s 로드밸런서 리소스 정리 중..."
 
-  # Kubeconfig 갱신 (접속 가능할 때만 시도)
   if aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION_CODE" >/dev/null 2>&1; then
     aws eks update-kubeconfig --region "$REGION_CODE" --name "$CLUSTER_NAME"
 
-    # Ingress와 LoadBalancer 타입 서비스 강제 삭제
-    # (오류가 나도 무시하고 계속 진행하도록 || true 붙임)
-    kubectl delete ingress --all --all-namespaces --timeout=20s || true
-    kubectl delete svc --all --all-namespaces --field-selector spec.type=LoadBalancer --timeout=20s || true
+    # Ingress/Service 삭제 (Safe Strategy: Graceful first -> Force later)
+    # 1. Graceful Delete 시도
+    echo "    K8s Ingress/LB Service 정상 삭제 시도..."
+    kubectl delete ingress --all --all-namespaces --wait=true --timeout=3m --ignore-not-found=true || true
+    
+    # LB 타입 서비스만 골라서 삭제
+    kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' \
+      | while read -r ns name; do
+          [ -z "$ns" ] && continue
+          kubectl delete svc -n "$ns" "$name" --wait=true --timeout=3m --ignore-not-found=true || true
+        done
 
-    echo " AWS가 로드밸런서를 삭제하는 동안 30초 대기..."
-    sleep 30
+    # 2. 아직 남은 리소스 확인 및 강제 삭제 (Force)
+    echo "    잔존 K8s 리소스 강제 정리..."
+    kubectl delete ingress --all --all-namespaces --grace-period=0 --force --ignore-not-found=true >/dev/null 2>&1 || true
+    kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' \
+      | while read -r ns name; do
+          [ -z "$ns" ] && continue
+          kubectl delete svc -n "$ns" "$name" --grace-period=0 --force --ignore-not-found=true >/dev/null 2>&1 || true
+        done
+
+    # ArgoCD 등 Helm 리소스 선제 삭제 (Namespace 인식 개선)
+    echo "    Helm Release 선제 정리 (Zombie 방지)..."
+    helm list -A --no-headers | awk '{print $1" "$2}' | while read -r name ns; do
+      if [ -n "$name" ] && [ -n "$ns" ]; then
+        echo "      Uninstalling Helm release: $name (ns: $ns)"
+        helm uninstall "$name" -n "$ns" --wait --timeout 5m || true
+      fi
+    done
+
+    echo " AWS가 로드밸런서를 삭제하는 동안 60초 대기..."
+    sleep 60
   else
     echo " 클러스터가 이미 없거나 접속 불가. K8s 리소스 정리 스킵."
   fi
@@ -302,8 +359,16 @@ destroy_region() {
   # 3. Terraform Destroy 시도
   echo " [3/4] Terraform Destroy 실행..."
 
+  # cleanup_vpc_deps로 실제 리소스가 지워졌을 수 있으므로 상태 동기화
+  echo "  State Refreshing..."
+  if [ -n "$VAR_FILE" ] && [ -f "$TF_PATH/$VAR_FILE" ]; then
+    terraform -chdir="$TF_PATH" refresh -var-file="$VAR_FILE" >/dev/null 2>&1 || true
+  else
+    terraform -chdir="$TF_PATH" refresh >/dev/null 2>&1 || true
+  fi
+
   set +e
-  # 변수 파일이 있으면 적용하여 destroy (기본 7분 타임아웃)
+  # 변수 파일이 있으면 적용하여 destroy (기본 타임아웃)
   if [ -n "$VAR_FILE" ] && [ -f "$TF_PATH/$VAR_FILE" ]; then
     timeout -k 30s "$DESTROY_TIMEOUT" terraform -chdir="$TF_PATH" destroy -auto-approve -var-file="$VAR_FILE"
   else
@@ -314,23 +379,21 @@ destroy_region() {
 
   # 4. [에러 핸들링] 실패 시 재시도
   if [ $EXIT_CODE -ne 0 ]; then
-    echo " Terraform Destroy 실패 또는 타임아웃! (Helm State 정리 및 재시도...)"
+    echo " Terraform Destroy 실패 또는 타임아웃!"
+    echo " 잔여 리소스 다시 정리 후 긴 타임아웃으로 재시도합니다..."
 
-    # State 정리
-    terraform -chdir="$TF_PATH" state rm helm_release.aws_load_balancer_controller || true
-    terraform -chdir="$TF_PATH" state rm helm_release.argocd || true
-    terraform -chdir="$TF_PATH" state rm module.observability.helm_release.kube_prometheus_stack || true
-    terraform -chdir="$TF_PATH" state rm module.eks.kubernetes_config_map_v1_data.aws_auth || true
+    # [중요] 위험한 state rm 자동 실행 제거함.
+    # 대신 실제 리소스(VPC/ENI)를 다시 한 번 강력하게 청소
+    if [ -n "$VPC_ID" ]; then
+      cleanup_vpc_deps "$VPC_ID" "$CLUSTER_NAME" "$REGION_CODE"
+    fi
 
-    # 다시 청소
-    cleanup_vpc_deps "$VPC_ID" "$CLUSTER_NAME" "$REGION_CODE"
-
-    # 다시 Destroy 시도 (기본 7분 타임아웃)
+    # 다시 Destroy 시도 (긴 타임아웃)
     echo " [4/4] Terraform Destroy 재실행 (최종)..."
     if [ -n "$VAR_FILE" ] && [ -f "$TF_PATH/$VAR_FILE" ]; then
-      timeout -k 30s "$DESTROY_TIMEOUT" terraform -chdir="$TF_PATH" destroy -auto-approve -var-file="$VAR_FILE"
+      timeout -k 30s "$DESTROY_TIMEOUT_LONG" terraform -chdir="$TF_PATH" destroy -auto-approve -var-file="$VAR_FILE"
     else
-      timeout -k 30s "$DESTROY_TIMEOUT" terraform -chdir="$TF_PATH" destroy -auto-approve
+      timeout -k 30s "$DESTROY_TIMEOUT_LONG" terraform -chdir="$TF_PATH" destroy -auto-approve
     fi
   fi
 
