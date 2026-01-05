@@ -111,12 +111,22 @@ wait_for_lbs_deleted() {
   start=$(date +%s)
   while true; do
     local lb_arns
+    local clb_names
+    
+    # Check ALB/NLB
     lb_arns=$(list_lb_arns)
-    if [ -z "$lb_arns" ]; then
+    
+    # Check Classic ELB
+    clb_names=$(aws elb describe-load-balancers --region "$REGION_CODE" \
+      --query "LoadBalancerDescriptions[?VPCId=='$CLEAN_VPC_ID'].LoadBalancerName" \
+      --output text 2>/dev/null)
+
+    if [ -z "$lb_arns" ] && [ -z "$clb_names" ]; then
       break
     fi
+    
     if [ $(( $(date +%s) - start )) -ge "$wait_seconds" ]; then
-      echo "    로드밸런서 삭제 대기 시간 초과 (잔존 있음)"
+      echo "    로드밸런서(ALB/NLB/CLB) 삭제 대기 시간 초과 (잔존 있음)"
       break
     fi
     sleep 20
@@ -163,14 +173,22 @@ cleanup_vpc_deps() {
   for pass in 1 2 3; do
     echo "  - 청소 패스 ${pass}/3"
 
-    # 1. 로드밸런서(ALB/NLB) 강제 삭제
+    # 1. 로드밸런서(ALB/NLB - elbv2) 강제 삭제
     echo "    로드밸런서(ALB/NLB) 조회 및 삭제..."
-    list_lb_arns | while read ARN;
- do
+    list_lb_arns | while read ARN; do
       if [ -z "$ARN" ] || [ "$ARN" == "None" ]; then continue; fi
       echo "      삭제 보호 해제 및 삭제 중: $ARN"
       aws elbv2 modify-load-balancer-attributes --region "$REGION_CODE" --load-balancer-arn "$ARN" --attributes Key=deletion_protection.enabled,Value=false >/dev/null 2>&1 || true
       aws elbv2 delete-load-balancer --region "$REGION_CODE" --load-balancer-arn "$ARN" >/dev/null 2>&1 || true
+    done
+
+    # 1.1. 클래식 로드밸런서(CLB - elb) 강제 삭제 (추가됨)
+    echo "    클래식 로드밸런서(CLB) 조회 및 삭제..."
+    CLB_NAMES=$(aws elb describe-load-balancers --region "$REGION_CODE" --query "LoadBalancerDescriptions[?VPCId=='$CLEAN_VPC_ID'].LoadBalancerName" --output text 2>/dev/null)
+    for CLB_NAME in $CLB_NAMES; do
+      if [ -z "$CLB_NAME" ] || [ "$CLB_NAME" == "None" ]; then continue; fi
+      echo "      CLB 삭제 중: $CLB_NAME"
+      aws elb delete-load-balancer --region "$REGION_CODE" --load-balancer-name "$CLB_NAME" >/dev/null 2>&1 || true
     done
 
     echo "      로드밸런서 삭제 상태 확인 및 대기..."
@@ -204,6 +222,19 @@ cleanup_vpc_deps() {
 
     echo "    NAT 삭제 전파 대기..."
     wait_for_nat_deleted 180
+
+    # 4-1. EIP 연결 해제 및 해제
+    echo "    EIP(공인 IP) 정리 시도..."
+    EIP_ASSOCS=$(aws ec2 describe-network-interfaces --region "$REGION_CODE" \
+      --filters "Name=vpc-id,Values=$CLEAN_VPC_ID" \
+      --query 'NetworkInterfaces[?Association.AssociationId!=null].[Association.AssociationId,Association.AllocationId]' \
+      --output text 2>/dev/null)
+    while read -r ASSOC_ID ALLOC_ID;
+ do
+      if [ -z "$ASSOC_ID" ] || [ -z "$ALLOC_ID" ]; then continue; fi
+      aws ec2 disassociate-address --region "$REGION_CODE" --association-id "$ASSOC_ID" >/dev/null 2>&1 || true
+      aws ec2 release-address --region "$REGION_CODE" --allocation-id "$ALLOC_ID" >/dev/null 2>&1 || true
+    done <<< "$EIP_ASSOCS"
 
     # 4.5. Lambda 및 기타 ENI 강제 정리 (중요: 서브넷 삭제 방해 요소)
     echo "    Lambda/Requester-Managed ENI 강제 정리..."
@@ -304,6 +335,8 @@ destroy_region() {
   echo "============================================"
 
   local TF_PATH="$BASE_DIR/$TARGET"
+  local VPC_ID
+  VPC_ID=$(get_vpc_id "$TF_PATH" "$REGION_CODE" "$CLUSTER_NAME")
 
   # 1. [청소] K8s LoadBalancer & Ingress 삭제 (ALB/NLB 제거)
   echo "[1/4] K8s 로드밸런서 리소스 정리 중..."
@@ -314,21 +347,42 @@ destroy_region() {
     # Ingress/Service 삭제 (Safe Strategy: Graceful first -> Force later)
     # 1. Graceful Delete 시도
     echo "    K8s Ingress/LB Service 정상 삭제 시도..."
-    kubectl delete ingress --all --all-namespaces --wait=true --timeout=3m --ignore-not-found=true || true
+    kubectl delete ingress --all --all-namespaces --wait=true --timeout=2m --ignore-not-found=true || true
     
     # LB 타입 서비스만 골라서 삭제
     kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' \
       | while read -r ns name; do
           [ -z "$ns" ] && continue
-          kubectl delete svc -n "$ns" "$name" --wait=true --timeout=3m --ignore-not-found=true || true
+          kubectl delete svc -n "$ns" "$name" --wait=true --timeout=2m --ignore-not-found=true || true
         done
+
+    # 1-1. AWS LB 잔존 여부 짧게 폴링
+    if [ -n "$VPC_ID" ]; then
+      echo "    AWS LoadBalancer 잔존 여부 확인 중..."
+      for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+        ELBV2_LEFT=$(aws elbv2 describe-load-balancers --region "$REGION_CODE" \
+          --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" --output text 2>/dev/null)
+        ELB_LEFT=$(aws elb describe-load-balancers --region "$REGION_CODE" \
+          --query "LoadBalancerDescriptions[?VPCId=='$VPC_ID'].LoadBalancerName" --output text 2>/dev/null)
+        if [ -z "$ELBV2_LEFT" ] && [ -z "$ELB_LEFT" ]; then
+          break
+        fi
+        sleep 10
+      done
+    fi
 
     # 2. 아직 남은 리소스 확인 및 강제 삭제 (Force)
     echo "    잔존 K8s 리소스 강제 정리..."
-    kubectl delete ingress --all --all-namespaces --grace-period=0 --force --ignore-not-found=true >/dev/null 2>&1 || true
+    kubectl get ingress -A -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' \
+      | while read -r ns name; do
+          [ -z "$ns" ] && continue
+          kubectl -n "$ns" patch ingress "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge >/dev/null 2>&1 || true
+          kubectl -n "$ns" delete ingress "$name" --grace-period=0 --force --ignore-not-found=true >/dev/null 2>&1 || true
+        done
     kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' \
       | while read -r ns name; do
           [ -z "$ns" ] && continue
+          kubectl -n "$ns" patch svc "$name" -p '{"metadata":{"finalizers":[]}}' --type=merge >/dev/null 2>&1 || true
           kubectl delete svc -n "$ns" "$name" --grace-period=0 --force --ignore-not-found=true >/dev/null 2>&1 || true
         done
 
@@ -349,7 +403,6 @@ destroy_region() {
 
   # 2. [선제 청소] VPC 의존 리소스(LB/ENI) 미리 제거
   echo "[2/4] VPC 의존 리소스 선제 정리..."
-  VPC_ID=$(get_vpc_id "$TF_PATH" "$REGION_CODE" "$CLUSTER_NAME")
   if [ -n "$VPC_ID" ]; then
     cleanup_vpc_deps "$VPC_ID" "$CLUSTER_NAME" "$REGION_CODE"
   else
