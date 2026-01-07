@@ -32,3 +32,9 @@ redis_num_cache_nodes = 2                      # HA 구성 (Primary + Replica)
 # [Observability] Grafana 관리자 비밀번호 (보안 주의)
 grafana_admin_password = "admin_password_secret_123!"
 
+# dr 자동화를 위해 추가
+global_cluster_identifier = "newsugar-global-db"
+eks_cluster_name          = "newsugar-dr-eks"
+eks_node_group_name       = "newsugar-dr-eks-node-group"
+healthcheck_fqdn = "newsugar.cloud"
+healthcheck_path = "/health"
