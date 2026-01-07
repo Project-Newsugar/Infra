@@ -18,3 +18,8 @@ output "cluster_auth_token" {
   # 만약 토큰 오류가 계속되면 provider.tf에서 exec 플러그인을 쓰는 방식으로 전환해야 함.
   # 일단은 2단계 배포(EKS 완료 후 Addon) 전략이므로 패스해도 됨.
 }
+
+output "node_group_name" {
+  description = "EKS node group name"
+  value       = aws_eks_node_group.main.node_group_name
+}
