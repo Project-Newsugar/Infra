@@ -72,7 +72,7 @@ resource "aws_lambda_function" "failover" {
   function_name    = "${var.project_name}-${var.env}-dr-failover"
   role             = aws_iam_role.dr_lambda_role.arn
   handler          = "failover.lambda_handler"
-  runtime          = "python3.14"
+  runtime          = "python3.12"
   source_code_hash = data.archive_file.failover_code.output_base64sha256
   timeout          = 60
 
