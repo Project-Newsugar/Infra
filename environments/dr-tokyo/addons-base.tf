@@ -70,3 +70,81 @@ resource "helm_release" "metrics_server" {
   
   depends_on = [module.eks]
 }
+
+# === External Secrets Operator (ESO) ===
+
+# 1 IAM Policy for Secrets Manager
+resource "aws_iam_policy" "eso_secretsmanager" {
+  name        = "${var.project_name}-${var.env}-${var.region}-eso-policy"
+  description = "Allow ESO to read from AWS Secrets Manager"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:ListSecrets"
+        ]
+        Resource = "*"
+      }
+      # KMS를 사용한 Secret이면 아래 권한이 필요할 수 있음
+      # {
+      #   Effect   = "Allow"
+      #   Action   = ["kms:Decrypt"]
+      #   Resource = "*"
+      # }
+    ]
+  })
+}
+
+# 2 IRSA Role for ESO
+module "eso_role" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "~> 5.0"
+
+  role_name = "${var.project_name}-${var.env}-${var.region}-eso-role"
+
+  role_policy_arns = {
+    eso = aws_iam_policy.eso_secretsmanager.arn
+  }
+
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["external-secrets:external-secrets"]
+    }
+  }
+}
+
+# 3 Helm Release for ESO
+resource "helm_release" "external_secrets" {
+  name             = "external-secrets"
+  repository       = "https://charts.external-secrets.io"
+  chart            = "external-secrets"
+  namespace        = "external-secrets"
+  create_namespace = true
+  version          = "0.10.5"
+
+  set {
+    name  = "serviceAccount.create"
+    value = "true"
+  }
+
+  set {
+    name  = "serviceAccount.name"
+    value = "external-secrets"
+  }
+
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = module.eso_role.iam_role_arn
+  }
+
+  depends_on = [
+    module.eks,
+    module.eso_role
+  ]
+}
