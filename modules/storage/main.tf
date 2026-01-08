@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 # 1. ECR Repository 생성 (Frontend, Backend)
 resource "aws_ecr_repository" "repos" {
   for_each             = toset(var.ecr_repo_names)

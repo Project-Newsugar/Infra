@@ -1,5 +1,16 @@
 data "aws_caller_identity" "current" {}
 
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+    }
+    archive = {
+      source = "hashicorp/archive"
+    }
+  }
+}
+
 # 1. Lambda Code Packaging
 data "archive_file" "failover_code" {
   type        = "zip"
