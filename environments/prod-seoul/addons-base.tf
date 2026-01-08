@@ -148,3 +148,33 @@ resource "helm_release" "external_secrets" {
     module.eso_role
   ]
 }
+
+# 4 ClusterSecretStore 자동 생성 (K8s Manifest)
+resource "kubernetes_manifest" "cluster_secret_store" {
+  manifest = {
+    apiVersion = "external-secrets.io/v1beta1"
+    kind       = "ClusterSecretStore"
+    metadata = {
+      name = "aws-secretsmanager-global"
+    }
+    spec = {
+      provider = {
+        aws = {
+          service = "SecretsManager"
+          # 변수를 사용하여 서울/도쿄 리전 자동 적용
+          region  = var.region
+          auth = {
+            jwt = {
+              serviceAccountRef = {
+                name      = "external-secrets"
+                namespace = "external-secrets"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  # 중요: ESO(Helm Chart)가 먼저 설치되어야 CRD(ClusterSecretStore)를 인식할 수 있음
+  depends_on = [helm_release.external_secrets]
+}
