@@ -5,6 +5,7 @@ module "storage" {
   env          = var.env
 
   region = var.region
+  is_primary = true
 
   # 생성할 ECR 리포지토리 이름 (Frontend, Backend)
   ecr_repo_names = [

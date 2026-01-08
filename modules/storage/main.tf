@@ -32,6 +32,20 @@ resource "aws_ecr_lifecycle_policy" "main" {
   })
 }
 
+# ECR Cross-Region Replication (Primary only)
+resource "aws_ecr_replication_configuration" "main" {
+  count = var.is_primary ? 1 : 0
+
+  replication_configuration {
+    rule {
+      destination {
+        region      = "ap-northeast-1" # 도쿄
+        registry_id = data.aws_caller_identity.current.account_id
+      }
+    }
+  }
+}
+
 # OIDC Provider를 "생성"하지 않고 "조회"만 함 (중복 방지)
 data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"

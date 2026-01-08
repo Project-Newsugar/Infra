@@ -13,3 +13,9 @@ variable "github_repos" {
   description = "List of GitHub repositories (org/repo) allowed to push to ECR"
   type        = list(string)
 }
+
+# ECR 도쿄로 자동 복제 위한 변수
+variable "is_primary" {
+  description = "Primary region flag"
+  type        = bool
+}
