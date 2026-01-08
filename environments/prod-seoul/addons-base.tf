@@ -56,6 +56,11 @@ resource "helm_release" "aws_load_balancer_controller" {
   ]
 }
 
+resource "time_sleep" "wait_for_lb_controller" {
+    depends_on      = [helm_release.aws_load_balancer_controller]
+    create_duration = "60s"
+}
+
 resource "helm_release" "metrics_server" {
   name       = "metrics-server"
   repository = "https://kubernetes-sigs.github.io/metrics-server/"
@@ -145,7 +150,8 @@ resource "helm_release" "external_secrets" {
 
   depends_on = [
     module.eks,
-    module.eso_role
+    module.eso_role,
+    time_sleep.wait_for_lb_controller
   ]
 }
 
