@@ -99,9 +99,9 @@ resource "aws_eks_node_group" "main" {
   force_update_version = true
 
   scaling_config {
-    desired_size = 2
-    max_size     = 3
-    min_size     = 1
+    desired_size = 3
+    max_size     = 10
+    min_size     = 2
   }
 
   instance_types = ["t3.medium"] # 비용 절감 (또는 t3.small)
@@ -134,7 +134,7 @@ data "aws_eks_cluster_auth" "cluster" {
 # 이미 설치된 애드온을 Terraform 관리하에 두기 위해 OVERWRITE 설정 필수
 # 순서: Node Group 생성 -> VPC-CNI 설치 -> CoreDNS/Kube-proxy 설치
 
-# 1) VPC-CNI (가장 중요: 노드가 생기면 바로 네트워크부터 깔아야 함)
+# 1. VPC-CNI (가장 중요: 노드가 생기면 바로 네트워크부터 깔아야 함)
 resource "aws_eks_addon" "vpc_cni" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "vpc-cni"
@@ -143,7 +143,7 @@ resource "aws_eks_addon" "vpc_cni" {
   depends_on = [aws_eks_node_group.main] 
 }
 
-# 2) CoreDNS (네트워크가 있어야 DNS가 작동함)
+# 2. CoreDNS (네트워크가 있어야 DNS가 작동함)
 resource "aws_eks_addon" "coredns" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "coredns"
@@ -152,7 +152,7 @@ resource "aws_eks_addon" "coredns" {
   depends_on = [aws_eks_node_group.main, aws_eks_addon.vpc_cni]
 }
 
-# 3) Kube-proxy (네트워크 규칙 관리)
+# 3. Kube-proxy (네트워크 규칙 관리)
 resource "aws_eks_addon" "kube_proxy" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "kube-proxy"
