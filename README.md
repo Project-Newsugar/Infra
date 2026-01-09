@@ -13,6 +13,7 @@ chmod +x setup.sh
 ```
 
 ### 삭제 방법
+Infra 삭제전에 먼저 프론트엔드와 백엔드 자동화 시킨 ArogoCD 애플리케이션을 삭제한다. 
 ```bash
 chmod +x destroy.sh
 ./destroy.sh seoul  # 서울 리전만 삭제
