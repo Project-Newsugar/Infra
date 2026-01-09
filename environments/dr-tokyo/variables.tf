@@ -149,3 +149,10 @@ variable "enable_cluster_secret_store" {
   type        = bool
   default     = true
 }
+
+# failover 후 인프라 설치시 도쿄 rds 문제 해결
+variable "source_region" {
+  description = "Source region for Global DB replication"
+  type        = string
+  default     = null
+}

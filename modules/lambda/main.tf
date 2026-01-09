@@ -71,7 +71,7 @@ resource "aws_iam_role_policy" "dr_lambda_policy" {
           "eks:DescribeNodegroup",
           "eks:UpdateNodegroupConfig"
         ]
-        Resource = "arn:aws:eks:${var.eks_region}:${data.aws_caller_identity.current.account_id}:cluster/${var.eks_cluster_name}/*"
+        Resource = "arn:aws:eks:${var.eks_region}:${data.aws_caller_identity.current.account_id}:nodegroup/${var.eks_cluster_name}/*"
       }
     ]
   })

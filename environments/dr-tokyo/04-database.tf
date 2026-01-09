@@ -25,6 +25,8 @@ module "database" {
   # Global Cluster 생성 활성화
   create_global_cluster     = var.db_enable_global_cluster
   global_cluster_identifier = var.db_global_identifier
+
+  source_region = var.source_region
 }
 
 # 2. ElastiCache (Redis)

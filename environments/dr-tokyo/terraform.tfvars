@@ -38,3 +38,6 @@ eks_cluster_name          = "newsugar-dr-eks"
 eks_node_group_name       = "newsugar-dr-eks-node-group"
 healthcheck_fqdn = "newsugar.cloud"
 healthcheck_path = "/health"
+
+# Global DB Source Region (Seoul)
+source_region = "ap-northeast-2"
