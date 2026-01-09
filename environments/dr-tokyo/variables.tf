@@ -142,3 +142,10 @@ variable "healthcheck_path" {
   type        = string
   default     = "/"
 }
+
+# ESO 설치 관련
+variable "enable_cluster_secret_store" {
+  description = "Enable ClusterSecretStore creation (requires existing EKS)"
+  type        = bool
+  default     = true
+}

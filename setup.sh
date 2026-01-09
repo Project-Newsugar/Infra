@@ -40,18 +40,27 @@ deploy_region() {
     return 1
   fi
 
-  # 1. Terraform init & apply
-  echo "Terraform 실행 중... (경로: $TF_PATH)"
-  terraform -chdir="$TF_PATH" init
+  # 1. 1차 Apply (Manifest 끄기)
+  echo "=== 1차 Terraform Apply (인프라 생성, Manifest 제외) ==="
+  local TF_OPTS="-var=enable_cluster_secret_store=false"
+
   if [ -n "$VAR_FILE" ] && [ -f "$TF_PATH/$VAR_FILE" ]; then
-    terraform -chdir="$TF_PATH" apply -auto-approve -var-file="$VAR_FILE"
+    terraform -chdir="$TF_PATH" apply -auto-approve -var-file="$VAR_FILE" $TF_OPTS
   else
-    terraform -chdir="$TF_PATH" apply -auto-approve
+    terraform -chdir="$TF_PATH" apply -auto-approve $TF_OPTS
   fi
 
-  # 2. Kubeconfig 업데이트
+  # 1-2. Kubeconfig 업데이트
   echo "Kubeconfig 업데이트 ($CLUSTER_NAME)"
   aws eks update-kubeconfig --region "$REGION_CODE" --name "$CLUSTER_NAME"
+
+  # 2. 2차 Apply (Manifest 켜기 - 기본값 true)
+  echo "=== 2차 Terraform Apply (Manifest 적용) ==="
+  if [ -n "$VAR_FILE" ] && [ -f "$TF_PATH/$VAR_FILE" ]; then
+    terraform -chdir="$TF_PATH" apply -auto-approve -var-file="$VAR_FILE" -var=enable_cluster_secret_store=true
+  else
+    terraform -chdir="$TF_PATH" apply -auto-approve -var=enable_cluster_secret_store=true
+  fi
 
   # 3. aws-auth 적용
   # 우선순위 1: 해당 환경 폴더 내의 aws-auth.yaml
