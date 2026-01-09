@@ -40,6 +40,8 @@ deploy_region() {
     return 1
   fi
 
+  terraform -chdir="$TF_PATH" init -upgrade
+
   # 1. 1차 Apply (Manifest 끄기)
   echo "=== 1차 Terraform Apply (인프라 생성, Manifest 제외) ==="
   local TF_OPTS="-var=enable_cluster_secret_store=false"
