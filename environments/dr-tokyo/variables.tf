@@ -156,3 +156,9 @@ variable "source_region" {
   type        = string
   default     = null
 }
+
+variable "replication_source_identifier" {
+  description = "Primary cluster ARN for Global DB secondary creation"
+  type        = string
+  default     = null
+}

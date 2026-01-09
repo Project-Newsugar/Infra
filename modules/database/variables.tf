@@ -49,4 +49,8 @@ variable "source_region" {
   default     = null
 }
 
-
+variable "replication_source_identifier" {
+  description = "Primary cluster ARN for creating a secondary cluster"
+  type        = string
+  default     = null
+}
