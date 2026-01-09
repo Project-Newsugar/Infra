@@ -75,7 +75,7 @@ resource "aws_rds_cluster" "main" {
 
   # Primary가 아닐 때만 소스 리전 지정 (Global DB Secondary용)
   source_region = var.is_primary ? null : var.source_region 
-  replication_source_identifier = var.is_primary ? null : var.replication_source_identifie
+  replication_source_identifier = var.is_primary ? null : var.replication_source_identifier
 
   # Secondary(복제본)일 때만 KMS 키 명시 필요
   kms_key_id = var.is_primary ? null : data.aws_kms_key.rds.arn
