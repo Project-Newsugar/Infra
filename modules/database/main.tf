@@ -72,7 +72,10 @@ resource "aws_rds_cluster" "main" {
 
   db_subnet_group_name    = aws_db_subnet_group.main.name
   vpc_security_group_ids  = var.security_group_ids
- 
+
+  # Primary가 아닐 때만 소스 리전 지정 (Global DB Secondary용)
+  source_region = var.is_primary ? null : var.source_region 
+
   # Secondary(복제본)일 때만 KMS 키 명시 필요
   kms_key_id = var.is_primary ? null : data.aws_kms_key.rds.arn
 

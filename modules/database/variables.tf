@@ -43,4 +43,10 @@ variable "is_primary" {
   default     = false
 }
 
+variable "source_region" {
+  description = "Source Region for Secondary Cluster (e.g. ap-northeast-2)"
+  type        = string
+  default     = null
+}
+
 
