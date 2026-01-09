@@ -40,12 +40,37 @@ check_and_clean_secondary_rds() {
     --output text)
 
   if [ "$GLOBAL_ID" = "None" ] || [ -z "$GLOBAL_ID" ]; then
+    echo "독립된 도쿄 클러스터($CLUSTER_ID) 발견. 삭제 프로세스 시작..."
+
     aws rds modify-db-cluster --region "$REGION" --db-cluster-identifier "$CLUSTER_ID" --no-deletion-protection >/dev/null
     aws rds wait db-cluster-available --region "$REGION" --db-cluster-identifier "$CLUSTER_ID" >/dev/null
+
+    echo "  - 인스턴스 삭제 중..."
+    local INSTANCES
+    INSTANCES=$(aws rds describe-db-clusters \
+      --region "$REGION" \
+      --db-cluster-identifier "$CLUSTER_ID" \
+      --query "DBClusters[0].DBClusterMembers[*].DBInstanceIdentifier" \
+      --output text)
+
+    for INSTANCE in $INSTANCES; do
+      if [ -n "$INSTANCE" ] && [ "$INSTANCE" != "None" ]; then
+        aws rds delete-db-instance --region "$REGION" --db-instance-identifier "$INSTANCE" --skip-final-snapshot >/dev/null
+      fi
+    done
+
+    echo "  - 인스턴스 삭제 완료 대기 중..."
+    for INSTANCE in $INSTANCES; do
+      if [ -n "$INSTANCE" ] && [ "$INSTANCE" != "None" ]; then
+        aws rds wait db-instance-deleted --region "$REGION" --db-instance-identifier "$INSTANCE" >/dev/null
+      fi
+    done
+
+    echo "  - 클러스터 삭제 중..."
     aws rds delete-db-cluster --region "$REGION" --db-cluster-identifier "$CLUSTER_ID" --skip-final-snapshot >/dev/null
-    echo "=== 삭제 대기 중..."
+    echo "클러스터 삭제 완료 대기 중..."
     aws rds wait db-cluster-deleted --region "$REGION" --db-cluster-identifier "$CLUSTER_ID"
-    echo "=== 삭제 완료."
+    echo "삭제 완료."
   else
     echo "  - Global DB 멤버 확인됨: $GLOBAL_ID (유지)"
   fi
