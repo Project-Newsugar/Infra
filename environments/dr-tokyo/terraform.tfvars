@@ -16,6 +16,7 @@ db_name            = "news_db"
 db_engine_version  = "8.0.mysql_aurora.3.08.2" # Aurora MySQL 3.08 (MySQL 8.0 호환)
 db_instance_class  = "db.r6g.large"
 db_master_username = "admin"
+
 # 1 = Writer만(빠르게 테스트), 2 = Writer+Reader(운영/HA)
 db_instance_count  = 1
 db_skip_final_snapshot = true
