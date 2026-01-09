@@ -154,9 +154,22 @@ resource "helm_release" "external_secrets" {
     time_sleep.wait_for_lb_controller
   ]
 }
+ 
+resource "null_resource" "wait_for_eso_crd" {
+  count = var.enable_cluster_secret_store ? 1 : 0
+  depends_on = [helm_release.external_secrets]
+  provisioner "local-exec" {
+    # 리눅스(Bash) 환경 기준 명령어입니다.
+    # setup.sh를 돌리는 환경에 kubectl이 설치되어 있어야 합니다.
+    # setup.sh에서 이미 kubeconfig 업데이트 수행
+    command = "kubectl wait --for=condition=Established crd/clustersecretstores.external-secrets.io --timeout=180s"
+  }
+}
 
 # 4 ClusterSecretStore 자동 생성 (K8s Manifest)
 resource "kubernetes_manifest" "cluster_secret_store" {
+  count = var.enable_cluster_secret_store ? 1 : 0
+
   manifest = {
     apiVersion = "external-secrets.io/v1beta1"
     kind       = "ClusterSecretStore"
@@ -167,7 +180,6 @@ resource "kubernetes_manifest" "cluster_secret_store" {
       provider = {
         aws = {
           service = "SecretsManager"
-          # 변수를 사용하여 서울/도쿄 리전 자동 적용
           region  = var.region
           auth = {
             jwt = {
@@ -182,5 +194,5 @@ resource "kubernetes_manifest" "cluster_secret_store" {
     }
   }
   # 중요: ESO(Helm Chart)가 먼저 설치되어야 CRD(ClusterSecretStore)를 인식할 수 있음
-  depends_on = [helm_release.external_secrets]
+  depends_on = [null_resource.wait_for_eso_crd]
 }
