@@ -409,6 +409,11 @@ destroy_region() {
     echo " VPC ID를 찾을 수 없어 선제 정리를 건너뜁니다."
   fi
 
+  # [추가] GVK 에러 방지를 위한 ClusterSecretStore 상태 선제 삭제
+  echo "    ESO 관련 CRD 에러 방지를 위해 테라폼 상태 정리..."
+  terraform -chdir="$TF_PATH" state rm 'kubernetes_manifest.cluster_secret_store' 2>/dev/null || true
+  terraform -chdir="$TF_PATH" state rm 'null_resource.wait_for_eso_crd' 2>/dev/null || true
+
   # 3. Terraform Destroy 시도
   echo " [3/4] Terraform Destroy 실행..."
 
@@ -423,9 +428,9 @@ destroy_region() {
   set +e
   # 변수 파일이 있으면 적용하여 destroy (기본 타임아웃)
   if [ -n "$VAR_FILE" ] && [ -f "$TF_PATH/$VAR_FILE" ]; then
-    timeout -k 30s "$DESTROY_TIMEOUT" terraform -chdir="$TF_PATH" destroy -auto-approve -var-file="$VAR_FILE"
+    timeout -k 30s "$DESTROY_TIMEOUT" terraform -chdir="$TF_PATH" destroy -auto-approve -var-file="$VAR_FILE" -var=enable_cluster_secret_store=false
   else
-    timeout -k 30s "$DESTROY_TIMEOUT" terraform -chdir="$TF_PATH" destroy -auto-approve
+    timeout -k 30s "$DESTROY_TIMEOUT" terraform -chdir="$TF_PATH" destroy -auto-approve -var=enable_cluster_secret_store=false
   fi
   EXIT_CODE=$?
   set -e
@@ -444,9 +449,9 @@ destroy_region() {
     # 다시 Destroy 시도 (긴 타임아웃)
     echo " [4/4] Terraform Destroy 재실행 (최종)..."
     if [ -n "$VAR_FILE" ] && [ -f "$TF_PATH/$VAR_FILE" ]; then
-      timeout -k 30s "$DESTROY_TIMEOUT_LONG" terraform -chdir="$TF_PATH" destroy -auto-approve -var-file="$VAR_FILE"
+      timeout -k 30s "$DESTROY_TIMEOUT_LONG" terraform -chdir="$TF_PATH" destroy -auto-approve -var-file="$VAR_FILE" -var=enable_cluster_secret_store=false
     else
-      timeout -k 30s "$DESTROY_TIMEOUT_LONG" terraform -chdir="$TF_PATH" destroy -auto-approve
+      timeout -k 30s "$DESTROY_TIMEOUT_LONG" terraform -chdir="$TF_PATH" destroy -auto-approve -var=enable_cluster_secret_store=false
     fi
   fi
 
