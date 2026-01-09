@@ -386,6 +386,11 @@ destroy_region() {
           kubectl delete svc -n "$ns" "$name" --grace-period=0 --force --ignore-not-found=true >/dev/null 2>&1 || true
         done
 
+    # [추가] PVC(Persistent Volume Claim) 삭제 -> EBS 볼륨 자동 삭제 유도
+    echo "    K8s PVC 및 PV 삭제 (EBS 볼륨 정리)..."
+    kubectl delete pvc --all --all-namespaces --wait=true --timeout=2m --ignore-not-found=true || true
+    kubectl delete pv --all --wait=true --timeout=2m --ignore-not-found=true || true
+
     # ArgoCD 등 Helm 리소스 선제 삭제 (Namespace 인식 개선)
     echo "    Helm Release 선제 정리 (Zombie 방지)..."
     helm list -A --no-headers | awk '{print $1" "$2}' | while read -r name ns; do
