@@ -151,6 +151,9 @@ case "$MODE" in
   all)
     echo "전체 리전(Seoul + Tokyo) 순차 배포를 시작합니다."
     deploy_region "prod-seoul" "ap-northeast-2" "newsugar-prod-eks" "global-db.tfvars"
+    echo "⏳ 서울 RDS 클러스터 준비 상태 확인 중..."
+    aws rds wait db-cluster-available --region ap-northeast-2 --db-cluster-identifier "newsugar-prod-aurora-cluster"
+    echo "✅ 서울 RDS 준비 완료. 도쿄 리전 배포를 시작합니다."
     deploy_region "dr-tokyo" "ap-northeast-1" "newsugar-dr-eks"
     ;;
   *)
