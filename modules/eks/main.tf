@@ -68,13 +68,13 @@ resource "aws_launch_template" "node" {
     var.security_group_ids, 
     [aws_eks_cluster.main.vpc_config[0].cluster_security_group_id]
   )
-
   tag_specifications {
     resource_type = "instance"
     tags = {
       Name = "${var.cluster_name}-node"
     }
   }
+
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -95,13 +95,13 @@ resource "aws_eks_node_group" "main" {
     id      = aws_launch_template.node.id
     version = "$Latest"
   }
-
+  
   force_update_version = true
 
   scaling_config {
-    desired_size = 2
-    max_size     = 3
-    min_size     = 1
+    desired_size = 3
+    max_size     = 10
+    min_size     = 2
   }
 
   instance_types = ["t3.medium"] # 비용 절감 (또는 t3.small)
@@ -134,16 +134,16 @@ data "aws_eks_cluster_auth" "cluster" {
 # 이미 설치된 애드온을 Terraform 관리하에 두기 위해 OVERWRITE 설정 필수
 # 순서: Node Group 생성 -> VPC-CNI 설치 -> CoreDNS/Kube-proxy 설치
 
-# 1 VPC-CNI (가장 중요: 노드가 생기면 바로 네트워크부터 깔아야 함)
+# 1. VPC-CNI (가장 중요: 노드가 생기면 바로 네트워크부터 깔아야 함)
 resource "aws_eks_addon" "vpc_cni" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "vpc-cni"
   resolve_conflicts_on_create = "OVERWRITE"
   # 노드 그룹이 완전히 다 만들어진 뒤에 설치
-  depends_on = [aws_eks_node_group.main]
+  depends_on = [aws_eks_node_group.main] 
 }
 
-# 2 CoreDNS (네트워크가 있어야 DNS가 작동함)
+# 2. CoreDNS (네트워크가 있어야 DNS가 작동함)
 resource "aws_eks_addon" "coredns" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "coredns"
@@ -152,7 +152,7 @@ resource "aws_eks_addon" "coredns" {
   depends_on = [aws_eks_node_group.main, aws_eks_addon.vpc_cni]
 }
 
-# 3 Kube-proxy (네트워크 규칙 관리)
+# 3. Kube-proxy (네트워크 규칙 관리)
 resource "aws_eks_addon" "kube_proxy" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "kube-proxy"
@@ -160,4 +160,54 @@ resource "aws_eks_addon" "kube_proxy" {
 
   # 이것도 노드랑 CNI가 있어야 함
   depends_on = [aws_eks_node_group.main, aws_eks_addon.vpc_cni]
+}
+
+
+# 9. EBS CSI Driver (gp3 스토리지 사용을 위해 필수)
+
+# 9-1. EBS CSI Driver용 IAM Role (IRSA)
+# AWS 관리형 정책(AmazonEBSCSIDriverPolicy)을 가져옮
+data "aws_iam_policy" "ebs_csi_policy" {
+  arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
+resource "aws_iam_role" "ebs_csi_driver" {
+  name = "${var.cluster_name}-ebs-csi-driver-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.eks_irsa.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "${replace(aws_iam_openid_connect_provider.eks_irsa.url, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+          }
+        }
+      }
+    ]
+  })
+}
+# 역할에 정책 연결
+resource "aws_iam_role_policy_attachment" "ebs_csi_driver_attach" {
+  role       = aws_iam_role.ebs_csi_driver.name
+  policy_arn = data.aws_iam_policy.ebs_csi_policy.arn
+}
+
+# 9-2. EBS CSI Driver Add-on 설치
+resource "aws_eks_addon" "ebs_csi_driver" {
+  cluster_name             = aws_eks_cluster.main.name
+  addon_name               = "aws-ebs-csi-driver"
+  resolve_conflicts_on_create = "OVERWRITE"
+  service_account_role_arn = aws_iam_role.ebs_csi_driver.arn
+
+  # 노드 그룹이 생성된 후 설치되어야 함
+  depends_on = [
+    aws_eks_node_group.main,
+    aws_iam_role_policy_attachment.ebs_csi_driver_attach
+  ]
 }

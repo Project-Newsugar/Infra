@@ -5,7 +5,7 @@ variable "project_name" {
 }
 
 variable "env" {
-  description = "Environment (prod/dev/dr)"
+  description = "Environment (dr)"
   type        = string
 }
 
@@ -110,9 +110,55 @@ variable "storage_class_name" {
   default = "gp3"
 }
 
+variable "is_primary" {
+  description = "Primary region flag"
+  type        = bool
+}
+
+# --- DR Lambda Failover ---
+variable "global_cluster_identifier" {
+  description = "RDS Global Cluster Identifier for DR failover"
+  type        = string
+}
+
+variable "eks_cluster_name" {
+  description = "EKS Cluster Name for DR failover"
+  type        = string
+}
+
+variable "eks_node_group_name" {
+  description = "EKS Node Group Name for DR failover"
+  type        = string
+}
+
+# 이벤트 발생 ->람다 실행을 위해
+variable "healthcheck_fqdn" {
+  description = "Route53 health check FQDN"
+  type        = string
+}
+
+variable "healthcheck_path" {
+  description = "Route53 health check path"
+  type        = string
+  default     = "/"
+}
+
 # ESO 설치 관련
 variable "enable_cluster_secret_store" {
   description = "Enable ClusterSecretStore creation (requires existing EKS)"
   type        = bool
   default     = true
+}
+
+# failover 후 인프라 설치시 도쿄 rds 문제 해결
+variable "source_region" {
+  description = "Source region for Global DB replication"
+  type        = string
+  default     = null
+}
+
+variable "replication_source_identifier" {
+  description = "Primary cluster ARN for Global DB secondary creation"
+  type        = string
+  default     = null
 }

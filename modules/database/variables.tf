@@ -35,3 +35,22 @@ variable "global_cluster_identifier" {
   type        = string
   default     = null
 }
+
+# 현재 리전이 Primary(Writer)인지 여부
+variable "is_primary" {
+  description = "Primary region flag for Aurora Global DB"
+  type        = bool
+  default     = false
+}
+
+variable "source_region" {
+  description = "Source Region for Secondary Cluster (e.g. ap-northeast-2)"
+  type        = string
+  default     = null
+}
+
+variable "replication_source_identifier" {
+  description = "Primary cluster ARN for creating a secondary cluster"
+  type        = string
+  default     = null
+}

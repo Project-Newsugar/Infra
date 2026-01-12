@@ -154,7 +154,7 @@ resource "helm_release" "external_secrets" {
     time_sleep.wait_for_lb_controller
   ]
 }
- 
+
 resource "null_resource" "wait_for_eso_crd" {
   count = var.enable_cluster_secret_store ? 1 : 0
   depends_on = [helm_release.external_secrets]

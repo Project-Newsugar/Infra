@@ -1,8 +1,12 @@
+data "aws_caller_identity" "current" {}
+
 # 1. ECR Repository 생성 (Frontend, Backend)
 resource "aws_ecr_repository" "repos" {
   for_each             = toset(var.ecr_repo_names)
   name                 = each.value
   image_tag_mutability = "MUTABLE"
+
+  force_delete = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -30,14 +34,27 @@ resource "aws_ecr_lifecycle_policy" "main" {
   })
 }
 
+# ECR Cross-Region Replication (Primary only)
+resource "aws_ecr_replication_configuration" "main" {
+  count = var.is_primary ? 1 : 0
+
+  replication_configuration {
+    rule {
+      destination {
+        region      = "ap-northeast-1" # 도쿄
+        registry_id = data.aws_caller_identity.current.account_id
+      }
+    }
+  }
+}
+
 # OIDC Provider를 "생성"하지 않고 "조회"만 함 (중복 방지)
 data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
 }
-
 # 3. GitHub Actions용 IAM Role
 resource "aws_iam_role" "github_actions" {
-  name = "${var.project_name}-${var.env}-github-actions-role"
+  name = "${var.project_name}-${var.env}-${var.region}-github-actions-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

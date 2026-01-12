@@ -1,3 +1,8 @@
+data "aws_rds_cluster" "primary" {
+  provider           = aws.seoul
+  cluster_identifier = "${var.project_name}-prod-aurora-cluster"
+}
+
 # 1. Aurora RDS (MySQL)
 module "database" {
   source = "../../modules/database"
@@ -5,8 +10,8 @@ module "database" {
   project_name      = var.project_name
   env               = var.env
   vpc_id            = module.network.vpc_id
-  
-  is_primary = true
+
+  is_primary = var.is_primary
 
   # Private Data Subnet에 배치 (보안 필수)
   subnet_ids        = module.network.data_subnet_ids
@@ -22,9 +27,15 @@ module "database" {
   instance_count    = var.db_instance_count
   skip_final_snapshot = var.db_skip_final_snapshot
 
-  # [피드백 반영] Global Cluster 생성 활성화
+  # Global Cluster 생성 활성화
   create_global_cluster     = var.db_enable_global_cluster
   global_cluster_identifier = var.db_global_identifier
+  replication_source_identifier = coalesce(
+    var.replication_source_identifier,
+    data.aws_rds_cluster.primary.arn
+  )
+
+  source_region = var.source_region
 }
 
 # 2. ElastiCache (Redis)

@@ -2,6 +2,11 @@ provider "aws" {
   region = var.region
 }
 
+provider "aws" {
+  alias  = "seoul"
+  region = "ap-northeast-2"
+}
+
 # Kubernetes Provider 설정
 provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
@@ -56,5 +61,3 @@ terraform {
     }
   }
 }
-
-

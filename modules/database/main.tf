@@ -46,11 +46,16 @@ resource "aws_secretsmanager_secret_version" "db_auth" {
 
 # Global Cluster 생성 (서울 리전용)
 resource "aws_rds_global_cluster" "main" {
-  count                     = var.create_global_cluster ? 1 : 0
+  count                     = var.is_primary && var.create_global_cluster ? 1 : 0
   global_cluster_identifier = var.global_cluster_identifier
   engine                    = "aurora-mysql"
   engine_version            = var.engine_version
   storage_encrypted         = true
+}
+
+# Secondary 리전에서 기본 RDS KMS 키 사용
+data "aws_kms_key" "rds" {
+  key_id = "alias/aws/rds"
 }
 
 # 4. Aurora Cluster
@@ -60,20 +65,31 @@ resource "aws_rds_cluster" "main" {
   engine_version          = var.engine_version
 
   # Global Cluster에 소속되도록 설정
-  global_cluster_identifier = var.create_global_cluster ? aws_rds_global_cluster.main[0].id : var.global_cluster_identifier
-  database_name           = var.db_name
-  master_username         = var.master_username
-  master_password         = random_password.master.result
-  
+  global_cluster_identifier = var.is_primary && var.create_global_cluster ? aws_rds_global_cluster.main[0].id : var.global_cluster_identifier
+  database_name   = var.is_primary ? var.db_name : null
+  master_username = var.is_primary ? var.master_username : null
+  master_password = var.is_primary ? random_password.master.result : null
+
   db_subnet_group_name    = aws_db_subnet_group.main.name
   vpc_security_group_ids  = var.security_group_ids
-  
+
+  # Primary가 아닐 때만 소스 리전 지정 (Global DB Secondary용)
+  source_region = var.is_primary ? null : var.source_region 
+  replication_source_identifier = var.is_primary ? null : var.replication_source_identifier
+
+  # Secondary(복제본)일 때만 KMS 키 명시 필요
+  kms_key_id = var.is_primary ? null : data.aws_kms_key.rds.arn
+
   # 스냅샷 변수로 제어. true 안찍고 삭제, false 찍고 삭제
   skip_final_snapshot     = var.skip_final_snapshot
   # 스냅샷 찍을 경우를 대비해 식별자 지정
   final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.project_name}-${var.env}-final-${formatdate("YYYYMMDDhhmmss", timestamp())}"
   storage_encrypted       = true
-  
+
+# 스냅샷 이름이 시간 때문에 바뀌어도 무시하도록 설정
+  lifecycle {
+    ignore_changes = [final_snapshot_identifier]
+  }  
   tags = { Name = "${var.project_name}-${var.env}-aurora" }
 }
 
