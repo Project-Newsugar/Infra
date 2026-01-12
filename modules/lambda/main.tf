@@ -85,7 +85,7 @@ resource "aws_lambda_function" "failover" {
   handler          = "failover.lambda_handler"
   runtime          = "python3.12"
   source_code_hash = data.archive_file.failover_code.output_base64sha256
-  timeout          = 60
+  timeout          = 300
 
   environment {
     variables = {
