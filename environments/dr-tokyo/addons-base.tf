@@ -27,6 +27,7 @@ resource "helm_release" "aws_load_balancer_controller" {
   version    = "1.9.2" 
 
   timeout = 600
+  disable_openapi_validation = true
 
   set {
     name  = "clusterName"
