@@ -41,7 +41,7 @@ Infra/
 
 ### 흐름  
 
-#### 트래픽 흐름 (ASCII)  
+#### 트래픽 흐름  
 ```
 User
   |
@@ -60,7 +60,7 @@ Pods -> Prometheus/Grafana (metrics)
 DB/ALB -> CloudWatch Metrics/Alarms -> SNS Alerts
 ```
 
-#### 개발자 배포 흐름 (ASCII)  
+#### 개발자 배포 흐름  
 ```
 GitHub Actions
   |
@@ -71,7 +71,7 @@ ECR (Primary)
 EKS (Seoul/Tokyo) pulls image
 ```
 
-#### 운영자 관측/알림 흐름 (ASCII)  
+#### 운영자 관측/알림 흐름  
 ```
 Prometheus/Grafana (Helm)
   |
@@ -84,7 +84,7 @@ CloudWatch Dashboard/Alarm
 SNS Alerts
 ```
 
-#### DR 자동화 흐름 (ASCII)  
+#### DR 자동화 흐름  
 ```
 Route53 HealthCheck (Seoul)
   -> CloudWatch Alarm
